@@ -1,0 +1,97 @@
+---
+title: "Bayesian Modeling"
+author: "Eugenia Maldonado"
+date: "6/5/2020"
+output: html_document
+---
+
+```{r}
+#downloaded Xcode and command line tools 
+
+
+#if (file.exists(".RData")) file.remove(".RData")
+
+#install.packages("Rcpp", repos = "https://rcppcore.github.io/drat")
+#library(Rcpp)
+#Sys.setenv(MAKEFLAGS = "-j4")
+
+#rstan_options(auto_write = TRUE)
+
+install.packages("httpuv")
+library(httpuv)
+
+install.packages("brms")
+library(brms)
+
+#sessionInfo()
+#pkgs <- c("rstan", "RBesT", "OncoBayes2", "rstanarm")
+#for(p in pkgs) {
+ # if(!require(p, character.only=TRUE))
+   # install.packages(p)
+  #require(p, character.only=TRUE)
+#}
+
+install.packages("rstan")
+library(rstan)
+#file.edit("~/.R/Makevars")
+
+install.packages("parallel")
+install.packages("ldr")
+
+#require(parallel)
+#cl <- makeCluster(32)
+#stopCluster(cl)
+
+library(parallel)
+library(ordinal)
+library(readxl)
+library(ldr)
+
+#The data
+setwd("~/Desktop/Research")
+ASTR_EX <- data.frame(read_excel("ASTR2016_Extended.xlsx"))
+
+ASTR_EX<-ASTR_EX[complete.cases(ASTR_EX)==TRUE,]
+
+
+```
+
+
+```{r}
+#The statistical models i need to run
+#first create your sub-models
+
+#Poisson
+install.packages("BayesFactor")
+library(BayesFactor)
+
+meta_ur <- lmBF(AVG_Total_MC ~UR, data=ASTR_EX)
+
+#The cumulative option for families should give your proportional odds models 
+grade <- lmBF(CRS_GRADE_ID ~ UR + ACT_COMP_GROUP, data=ASTR_EX) 
+
+ASTR_EX$AVG_Total_MC<-as.integer(ASTR_EX$AVG_Total_MC)
+ASTR_EX$UR<-as.integer(ASTR_EX$UR)
+
+#Putting it all together but starting simple, maybe
+model_simple <- brm(AVG_Total_MC ~ UR,       
+                     family=poisson(),
+                     data= ASTR_EX,
+                     chains=2,
+                     cores=4)
+options(mc.cores=1)
+
+#Put it all together
+
+alltogether <- brm(meta_ur + grade  + set_rescor(FALSE),
+                  data =  ASTR_EX,
+                  cores= 4,
+                  chains=4)
+
+
+
+
+
+
+```
+
