@@ -85,7 +85,7 @@ options(mc.cores=1)
 
 alltogether <- brm(meta_ur + grade  + set_rescor(FALSE),
                   data =  ASTR_EX,
-                  cores= 4,
+                  cores= 1,
                   chains=4)
 
 
