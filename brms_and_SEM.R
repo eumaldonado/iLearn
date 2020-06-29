@@ -2,8 +2,6 @@
 #author: "Hannah Valdiviejas"
 #date: "6/9/2020"
 
-#Why are we doing this?
-
 remove.packages("rstan")
 if (file.exists(".RData")) file.remove(".RData")
 
@@ -52,32 +50,54 @@ summary(ASTR_EX)
 attach(ASTR_EX)
 head(ASTR_EX)
 
-#The statistical models i need to run
-#first create your sub-models
+#This was supposed to be the trace plot
+#Do we need to create a sequence for the trace plots -- Markov Chain 
+install.packages("coda")
+library(rstan)
+library(coda)
+install.packages("mcmcr")
+fit2 <- lm_imp(CRS_GRADE_ID ~ AVG_Total_MC  + UR + AVG_WC + ACT_COMP_GROUP + PostCount,data = ASTR_EX,n.chains = 2)
+install.packages("JointAI")
+library(JointAI)
+traceplot(mcmc(fit))
+
+#First posterior predicitve checks
+#Density Plots
+library(gridExtra)
+grid.arrange(stan_trace(alltogether$fit, ncol=1),
+             stan_dens(alltogether$fit, separate_chains=TRUE,ncol=1),
+             ncol=2)
 
 
 variable.names(ASTR_EX)
 hist(AVG_WC)
 hist(PostCount)
 
+#Next create your sub-models
+
 #Poisson
-#meta_ur <- 
+#Could not find BRF function
 meta_ur <- bf(AVG_Total_MC ~ UR, family="poisson")
-#Not applicable?
-WAIC(meta_ur)
+summary(meta_ur)
+
+#Poisson
+ACT_ur <- bf(ACT_COMP_GROUP ~ UR, family="poisson")
+summary(ACT_ur)
 
 #The cumulative option for families should give your proportional odds models 
-grade <- bf(CRS_GRADE_ID ~ UR + ACT_COMP_GROUP, family="cumulative") 
+grade <- bf(CRS_GRADE_ID ~ AVG_Total_MC + UR + ACT_COMP_GROUP, family="cumulative") 
+summary(grade)
+WAIC(grade)
 
 #Putting it all together but starting simple, maybe
 #The ratio of Estimate divided by Error = Z score
 #Z-score = -0.27
-model_simple <-brm (AVG_Total_MC ~ UR,       
-                     family="poisson",
-                     data= ASTR_EX,
-                     chains=1,
-                     cores=4)
-summary(model_simple)
+#model_simple <-brm (AVG_Total_MC ~ UR,       
+                     #family="poisson",
+                     #data= ASTR_EX,
+                     #chains=1,
+                     #cores=4)
+#summary(model_simple)
 
 #The smaller the better
 install.packages("LaplacesDemon")
@@ -86,60 +106,6 @@ loo(model_simple)
 WAIC(model_simple)
 
 
-#MC on WC
-#Z-score = -0.25
-model_simple_ACT <-brm (AVG_Total_MC ~ ACT_COMP_GROUP,       
-                        family="poisson",
-                        data= ASTR_EX,
-                        chains=1,
-                        cores=4)
-summary(model_simple_ACT)
-
-
-#course grade on post counts
-#Z-score = 0
-model_simple_Grade_PC <-brm (CRS_GRADE_ID ~ PostCount,       
-                        family="poisson",
-                        data= ASTR_EX,
-                        chains=1,
-                        cores=4)
-summary(model_simple_Grade_PC)
-
-#course grade on post counts
-#Z-score = 0.92
-model_simple_Grade_UR <-brm (CRS_GRADE_ID ~ UR,       
-                             family="poisson",
-                             data= ASTR_EX,
-                             chains=1,
-                             cores=4)
-summary(model_simple_Grade_UR)
-
-#ACT and Grade
-#Z- score = -0.78
-model_simple_Grade_ACT <-brm (CRS_GRADE_ID ~ ACT_COMP_GROUP,       
-                             family="poisson",
-                             data= ASTR_EX,
-                             chains=1,
-                             cores=4)
-summary(model_simple_Grade_ACT)
-
-#UR on post count
-model_simple_PC_UR <-brm (PostCount ~ UR,       
-                        family="poisson",
-                        data= ASTR_EX,
-                        chains=1,
-                        cores=4)
-summary(model_simple_PC_UR)
-
-#Post Count and WC
-#Z-score = -5
-model_simple_PC_WC <-brm (PostCount ~ AVG_WC,       
-                          family="poisson",
-                          data= ASTR_EX,
-                          chains=1,
-                          cores=4)
-summary(model_simple_PC_WC)
-
 #Put it all together
 
 #Making variables integers for the model to be able to porcess 
@@ -147,14 +113,10 @@ summary(model_simple_PC_WC)
 #ASTR_EX$UR <- as.integer(ASTR_EX$UR)
 
 ?set_rescor
-#default is TRUE but that indicates lienar..will not run with false
+#default is TRUE but that indicates linear..will not run with false
 
-#Z-Score MC = -0.6
-#Z-Score UR = 0.69
-#Z-Score WC = 0 
-#Z-Score ACT = -0.82
-#Z-score PC = 0 
-#What does it do?
+library(brms)
+
 alltogether <- brm(CRS_GRADE_ID ~ AVG_Total_MC  + UR + AVG_WC + ACT_COMP_GROUP + PostCount, 
                   data = ASTR_EX, 
                   family = "Poisson",
@@ -169,12 +131,6 @@ loo(alltogether)
 WAIC(alltogether)
 
 ?prior
-
-#PLOTTING
-library(gridExtra)
-grid.arrange(stan_trace(alltogether$fit, ncol=1),
-             stan_dens(alltogether$fit, separate_chains=TRUE,ncol=1),
-             ncol=2)
 
 #Calculating R^2
 #What does it all mean!?
