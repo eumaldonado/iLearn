@@ -78,15 +78,15 @@ hist(PostCount)
 #Poisson
 #Could not find BRF function
 meta_ur <- bf(AVG_Total_MC ~ UR, family="poisson")
-summary(meta_ur)
+fixef(meta_ur)
 
 #Poisson
 ACT_ur <- bf(ACT_COMP_GROUP ~ UR, family="poisson")
-summary(ACT_ur)
+fixef(ACT_ur)
 
 #The cumulative option for families should give your proportional odds models 
 grade <- bf(CRS_GRADE_ID ~ AVG_Total_MC + UR + ACT_COMP_GROUP, family="cumulative") 
-summary(grade)
+fixef(grade)
 WAIC(grade)
 
 #Putting it all together but starting simple, maybe
@@ -119,12 +119,34 @@ library(brms)
 
 alltogether <- brm(CRS_GRADE_ID ~ AVG_Total_MC  + UR + AVG_WC + ACT_COMP_GROUP + PostCount, 
                   data = ASTR_EX, 
-                  family = "Poisson",
+                  warmup = 2000,iter = 5000,
+                  family = "cumulative",
                   chains= 4,
                   cores= 1)
 summary(alltogether)
 plot(alltogether)
+#mcmc object
+allpost <- as.mcmc(alltogether)
+class(allpost)
 
+#posterior density function 
+traceplot(allpost,smooth=TRUE, type = "l")
+
+#
+geweke.diag(allpost,frac1 = .1,frac2 = .50)
+geweke.plot(allpost)
+
+all.stan <- stancode(alltogether)
+all.stan
+
+densplot(allpost)
+
+#autocorrelations
+autocorr.plot(allpost)
+
+#posterior predicitve checking
+#uses model to generate what obser
+pp_check(allpost, fun = "dens_overlay")
 
 #WAIC very low, loo better
 loo(alltogether)
