@@ -6,6 +6,8 @@
 remove.packages("rstan")
 if (file.exists(".RData")) file.remove(".RData")
 
+options(mc.cores = parallel::detectCores())
+
 install.packages("Rcpp", repos = "https://rcppcore.github.io/drat")
 Sys.setenv(MAKEFLAGS = "-j4")
 install.packages("rstan")
@@ -43,6 +45,11 @@ install.packages("pCalibrate")
 library(pCalibrate)
 
 library(brms)
+
+##For Mediation
+install.packages("piecewiseSEM")
+library(piecewiseSEM)
+library(lavaan)
 
 #####################################################################################################
 #The actual analysis
@@ -109,6 +116,7 @@ WAIC(model_simple)
 #default is TRUE but that indicates linear..will not run with false
 
 #warmup = first 2000 iteration
+#rhat =  ratios of between and within variance estimates. 
 alltogether <- brm(CRS_GRADE_ID ~ AVG_Total_MC  + UR + AVG_WC + ACT_COMP_GROUP + PostCount, 
                   data = ASTR_EX, 
                   warmup = 2000,iter = 5000,
@@ -118,25 +126,97 @@ alltogether <- brm(CRS_GRADE_ID ~ AVG_Total_MC  + UR + AVG_WC + ACT_COMP_GROUP +
 summary(alltogether)
 plot(alltogether)
 
+##########################
+#########Mediation########
+##########################
+
+#Step 1
+#What should the order be?
+Med_1 <- "
+  AVG_Total_MC ~ UR + ACT_COMP_GROUP
+  CRS_GRADE_ID ~ AVG_Total_MC + UR + ACT_COMP_GROUP"
+
+k_fit_lavaan <- sem(Med_1, data = ASTR_EX)
+#No significance
+summary(k_fit_lavaan)
+
+#Step 2
+#Where does post/word count fit into this?
+
+meta_ur <- bf(AVG_Total_MC ~ UR, family="poisson")
+#this doesnt run 
+fixef(meta_ur)
+
+#Poisson
+ACT_ur <- bf(ACT_COMP_GROUP ~ UR, family="poisson")
+fixef(ACT_ur)
+
+#Post count makes everything take FOREVER
+
+PC_UR <- bf(PostCount ~ UR + AVG_WC)
+
+grade <- bf(CRS_GRADE_ID ~ AVG_Total_MC + UR + ACT_COMP_GROUP, family="cumulative") 
+fixef(grade)
+WAIC(grade)
+
+alltogether_brms <- brm(meta_ur + ACT_ur + PC_UR + grade, 
+                   data = ASTR_EX, 
+                   warmup = 2000,iter = 5000,
+                   family = "cumulative",
+                   chains= 4,
+                   cores= 1)
+summary(alltogether_brms)
+#They look good!
+plot(alltogether_brms)
+
+#Now we take them apart and run the loo or WAIC on each piece 
+meta_ur_fit <- brm(meta_ur,
+                data=ASTR_EX,
+                cores=2, chains = 2)
+
+ACT_ur_fit <- brm(ACT_ur,
+                   data=ASTR_EX,
+                   cores=2, chains = 2)
+
+PC_UR_fit <- brm(PC_UR,
+                  data=ASTR_EX,
+                  cores=2, chains = 2)
+
+
+grade_fit <- brm(grade,
+                 data=ASTR_EX,
+                 cores=2, chains = 2)
+
+waic(k_fit_lavaan)
+waic(meta_ur_fit)
+waic(ACT_ur_fit)
+waic(PC_UR_fit)
+waic(grade_fit)
 ################################################
 ################### Model checks ############### 
 ################################################
+
+#Have to do the model checks for the new alltogether brms 
+#wanted to run pp_check first 
 
 #making the mcmc object -- necessary for the posterior chains 
 allpost <- as.mcmc(alltogether)
 #tells us whether making it an mcmc object worked 
 class(allpost)
 
+
 #posterior density function 
 #traceplot
+#This is a time series plot of estimated θ’s over iterations of the alogrithm
+#(after excluing the burn-ins or warm-ups)
 #All the different colors are the different chains 
 #The line in the middle should be horizontal 
 traceplot(allpost,smooth=TRUE, type = "l")
 
 #Geweke's Convergence Diagnostic
 #based on a test for equality of the means of the first and last part of a Markov chain (by default the first 10% and the last 50%).
-#If the samples are drawn from the stationary distribution of the chain, the two means are equal and Geweke's statistic has an 
-#asymptotically standard normal distribution
+#compute the mean of say the first 10% of the sample and the mean of the last say 50% of the samples. If the chain is flat (stable), 
+#then these two mean should be equal
 #We generally want numbers to be under 2 
 geweke.diag(allpost,frac1 = .1,frac2 = .50)
 #we want the stars to be between the dashed lines
@@ -159,8 +239,9 @@ autocorr.plot(allpost)
 #argument will allow us to summarize the posterior predictions as a dot 
 #(mean) and standard error bars superimposed on a bar plot of the original data
 #will not run
-pp_check(allpost, type = "overlaid", fun = "bars")
+pp_check(allpost)
 ?ppc_bars
+pp_check (allpost, "dist", nreps=30)
 
 #WAIC very low, loo better
 loo(alltogether)
