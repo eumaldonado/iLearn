@@ -2,6 +2,7 @@
 #author: "Hannah Valdiviejas"
 #date: "6/9/2020"
 
+#Loading all the packages needed
 remove.packages("rstan")
 if (file.exists(".RData")) file.remove(".RData")
 
@@ -41,7 +42,10 @@ library(readxl)
 install.packages("pCalibrate")
 library(pCalibrate)
 
+library(brms)
+
 #####################################################################################################
+#The actual analysis
 
 #The data
 setwd("~/Desktop")
@@ -50,19 +54,16 @@ summary(ASTR_EX)
 attach(ASTR_EX)
 head(ASTR_EX)
 
-#This was supposed to be the trace plot
-#Do we need to create a sequence for the trace plots -- Markov Chain 
 install.packages("coda")
 library(rstan)
 library(coda)
 install.packages("mcmcr")
-fit2 <- lm_imp(CRS_GRADE_ID ~ AVG_Total_MC  + UR + AVG_WC + ACT_COMP_GROUP + PostCount,data = ASTR_EX,n.chains = 2)
 install.packages("JointAI")
 library(JointAI)
 traceplot(mcmc(fit))
 
-#First posterior predicitve checks
 #Density Plots
+#if chains converge nicely then compute w/in and btwn chain variance 
 library(gridExtra)
 grid.arrange(stan_trace(alltogether$fit, ncol=1),
              stan_dens(alltogether$fit, separate_chains=TRUE,ncol=1),
@@ -78,6 +79,7 @@ hist(PostCount)
 #Poisson
 #Could not find BRF function
 meta_ur <- bf(AVG_Total_MC ~ UR, family="poisson")
+#this doesnt run 
 fixef(meta_ur)
 
 #Poisson
@@ -89,15 +91,6 @@ grade <- bf(CRS_GRADE_ID ~ AVG_Total_MC + UR + ACT_COMP_GROUP, family="cumulativ
 fixef(grade)
 WAIC(grade)
 
-#Putting it all together but starting simple, maybe
-#The ratio of Estimate divided by Error = Z score
-#Z-score = -0.27
-#model_simple <-brm (AVG_Total_MC ~ UR,       
-                     #family="poisson",
-                     #data= ASTR_EX,
-                     #chains=1,
-                     #cores=4)
-#summary(model_simple)
 
 #The smaller the better
 install.packages("LaplacesDemon")
@@ -115,8 +108,7 @@ WAIC(model_simple)
 ?set_rescor
 #default is TRUE but that indicates linear..will not run with false
 
-library(brms)
-
+#warmup = first 2000 iteration
 alltogether <- brm(CRS_GRADE_ID ~ AVG_Total_MC  + UR + AVG_WC + ACT_COMP_GROUP + PostCount, 
                   data = ASTR_EX, 
                   warmup = 2000,iter = 5000,
@@ -125,51 +117,52 @@ alltogether <- brm(CRS_GRADE_ID ~ AVG_Total_MC  + UR + AVG_WC + ACT_COMP_GROUP +
                   cores= 1)
 summary(alltogether)
 plot(alltogether)
-#mcmc object
+
+################################################
+################### Model checks ############### 
+################################################
+
+#making the mcmc object -- necessary for the posterior chains 
 allpost <- as.mcmc(alltogether)
+#tells us whether making it an mcmc object worked 
 class(allpost)
 
 #posterior density function 
+#traceplot
+#All the different colors are the different chains 
+#The line in the middle should be horizontal 
 traceplot(allpost,smooth=TRUE, type = "l")
 
-#
+#Geweke's Convergence Diagnostic
+#based on a test for equality of the means of the first and last part of a Markov chain (by default the first 10% and the last 50%).
+#If the samples are drawn from the stationary distribution of the chain, the two means are equal and Geweke's statistic has an 
+#asymptotically standard normal distribution
+#We generally want numbers to be under 2 
 geweke.diag(allpost,frac1 = .1,frac2 = .50)
+#we want the stars to be between the dashed lines
+#UR is a little off but not so bad
 geweke.plot(allpost)
 
+#Stan code to find priors 
 all.stan <- stancode(alltogether)
 all.stan
 
+#density plot
+#Post count somewhat skewed 
 densplot(allpost)
 
 #autocorrelations
+#we want autocorrelation to be at 0 bc that means tht variables aren't corr.
 autocorr.plot(allpost)
 
 #posterior predicitve checking
-#uses model to generate what obser
-pp_check(allpost, fun = "dens_overlay")
+#argument will allow us to summarize the posterior predictions as a dot 
+#(mean) and standard error bars superimposed on a bar plot of the original data
+#will not run
+pp_check(allpost, type = "overlaid", fun = "bars")
+?ppc_bars
 
 #WAIC very low, loo better
 loo(alltogether)
 WAIC(alltogether)
 
-?prior
-
-#Calculating R^2
-#What does it all mean!?
-install.packages("rstanarm")
-library(rstanarm)
-fit <- stan_glm(
-  CRS_GRADE_ID ~ AVG_Total_MC  + UR + AVG_WC + ACT_COMP_GROUP + PostCount,
-  data = ASTR_EX,
-  QR = TRUE,
-  chains = 2,
-  refresh = 0
-)
-
-rsq <- bayes_R2(fit)
-print(median(rsq))
-
-hist(rsq)
-
-loo_rsq <- loo_R2(fit)
-print(median(loo_rsq))
