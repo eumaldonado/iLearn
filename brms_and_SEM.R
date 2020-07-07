@@ -3,7 +3,6 @@
 #date: "6/9/2020"
 
 #Loading all the packages needed
-remove.packages("rstan")
 if (file.exists(".RData")) file.remove(".RData")
 
 options(mc.cores = parallel::detectCores())
@@ -11,18 +10,34 @@ options(mc.cores = parallel::detectCores())
 install.packages("Rcpp", repos = "https://rcppcore.github.io/drat")
 Sys.setenv(MAKEFLAGS = "-j4")
 install.packages("rstan")
+install.packages("httpuv")
+install.packages("brms")
+install.packages("pCalibrate")
+install.packages("piecewiseSEM")
+install.packages("coda")
+install.packages("mcmcr")
+install.packages("JointAI")
+install.packages("gridExtra")
+install.packages("LaplacesDemon")
+install.packages("lavaan")
+install.packages("bayesplot")
+library(bayesplot)
+library(gridExtra)
+library(JointAI)
 library(rstan)
-
-install.packages("rstan", type = "source")
-library(rstan)
+library(httpuv)
+library(brms)
+library(parallel)
+library(ordinal)
+library(readxl)
+library(pCalibrate)
+library(piecewiseSEM)
+library(lavaan)
+library(coda)
+library(mcmcr)
+library(LaplacesDemon)
 
 rstan_options(auto_write = TRUE)
-
-install.packages("httpuv")
-library(httpuv)
-
-install.packages("brms")
-library(brms)
 
 sessionInfo()
 pkgs <- c("rstan", "RBesT", "OncoBayes2", "rstanarm")
@@ -32,46 +47,19 @@ for(p in pkgs) {
   require(p, character.only=TRUE)
 }
 
-install.packages("rstan")
-
-
-library(parallel)
-
-library(ordinal)
-library(readxl)
-
-#to calculate p-value?
-install.packages("pCalibrate")
-library(pCalibrate)
-
-library(brms)
-
-##For Mediation
-install.packages("piecewiseSEM")
-library(piecewiseSEM)
-library(lavaan)
-
 #####################################################################################################
 #The actual analysis
 
 #The data
 setwd("~/Desktop")
-ASTR_EX <- read_excel("ASTR2016_Extended.xlsx")
-summary(ASTR_EX)
-attach(ASTR_EX)
-head(ASTR_EX)
-
-install.packages("coda")
-library(rstan)
-library(coda)
-install.packages("mcmcr")
-install.packages("JointAI")
-library(JointAI)
-traceplot(mcmc(fit))
+ASTR_EX <- read_excel("Research/ASTR2016_Extended.xlsx")
+#summary(ASTR_EX)
+#attach(ASTR_EX)
+#head(ASTR_EX)
 
 #Density Plots
 #if chains converge nicely then compute w/in and btwn chain variance 
-library(gridExtra)
+
 grid.arrange(stan_trace(alltogether$fit, ncol=1),
              stan_dens(alltogether$fit, separate_chains=TRUE,ncol=1),
              ncol=2)
@@ -83,11 +71,8 @@ hist(PostCount)
 
 #Next create your sub-models
 
-#Poisson
-#Could not find BRF function
-meta_ur <- bf(AVG_Total_MC ~ UR, family="poisson")
 #this doesnt run 
-fixef(meta_ur)
+
 
 #Poisson
 ACT_ur <- bf(ACT_COMP_GROUP ~ UR, family="poisson")
@@ -100,8 +85,6 @@ WAIC(grade)
 
 
 #The smaller the better
-install.packages("LaplacesDemon")
-library(LaplacesDemon)
 loo(model_simple)
 WAIC(model_simple)
 
@@ -112,7 +95,7 @@ WAIC(model_simple)
 #ASTR_EX$AVG_Total_MC <- as.integer(ASTR_EX$AVG_Total_MC)
 #ASTR_EX$UR <- as.integer(ASTR_EX$UR)
 
-?set_rescor
+
 #default is TRUE but that indicates linear..will not run with false
 
 #warmup = first 2000 iteration
@@ -136,10 +119,17 @@ Med_1 <- "
   AVG_Total_MC ~ UR + ACT_COMP_GROUP
   CRS_GRADE_ID ~ AVG_Total_MC + UR + ACT_COMP_GROUP"
 
+
 k_fit_lavaan <- sem(Med_1, data = ASTR_EX)
 #No significance
 summary(k_fit_lavaan)
 
+##NEW
+k_fit_psem<-psem(
+  lm(AVG_Total_MC ~ UR + ACT_COMP_GROUP),
+  lm(CRS_GRADE_ID ~ AVG_Total_MC + UR + ACT_COMP_GROUP),
+  data=ASTR_EX
+)
 #Step 2
 #Where does post/word count fit into this?
 
@@ -192,6 +182,30 @@ waic(meta_ur_fit)
 waic(ACT_ur_fit)
 waic(PC_UR_fit)
 waic(grade_fit)
+
+summary(k_fit_lavaan)
+
+# Prediction
+#What do we set these values at? 
+newdata=data.frame(meta_ur=, ACT_ur=,PC_UR=)
+meta_ur_pred<- fitted(alltogether_brms, newdata=newdata,
+                    resp="meta_ur", nsamples= 1000,
+                    summary=FALSE)
+median(meta_ur_pred)
+
+posterior_interval(cover_pred)
+
+newdata2<- expand.grid(meta_ur = newdata$meta_ur, cover= as.vector(meta_ur_pred))
+newdata3<- expand.grid()
+
+meta_ur_pred<-fitted(alltogether_brms,newdata2)
+
+grade_pred<-fitted(alltogether_brms, newdata=newdata3,
+                   resp="grade", nsamples = 1000,
+                   summary = FALSE)
+grade_pred<-as.matrix(diag(grade_pred))
+
+plot(density(as.vector(grade_pred)))
 ################################################
 ################### Model checks ############### 
 ################################################
@@ -235,13 +249,17 @@ densplot(allpost)
 #we want autocorrelation to be at 0 bc that means tht variables aren't corr.
 autocorr.plot(allpost)
 
+
 #posterior predicitve checking
 #argument will allow us to summarize the posterior predictions as a dot 
 #(mean) and standard error bars superimposed on a bar plot of the original data
 #will not run
 pp_check(allpost)
 ?ppc_bars
-pp_check (allpost, "dist", nreps=30)
+?pp_check
+
+pp_check (alltogether_brms, "bars", nreps=30)
+
 
 #WAIC very low, loo better
 loo(alltogether)
