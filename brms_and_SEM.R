@@ -138,12 +138,12 @@ meta_ur <- bf(AVG_Total_MC ~ UR, family="poisson")
 fixef(meta_ur)
 
 #Poisson
-ACT_ur <- bf(ACT_COMP_GROUP ~ UR, family="poisson")
+ACT_ur <- bf(ACT_COMP_GROUP ~ UR, family="cumulative")
 fixef(ACT_ur)
 
 #Post count makes everything take FOREVER
 
-PC_UR <- bf(PostCount ~ UR + AVG_WC)
+PC_UR <- bf(PostCount ~ UR + AVG_WC, family ="poisson" )
 
 grade <- bf(CRS_GRADE_ID ~ AVG_Total_MC + UR + ACT_COMP_GROUP, family="cumulative") 
 fixef(grade)
@@ -168,6 +168,7 @@ ACT_ur_fit <- brm(ACT_ur,
                    data=ASTR_EX,
                    cores=2, chains = 2)
 
+#dont run this it takes too long
 PC_UR_fit <- brm(PC_UR,
                   data=ASTR_EX,
                   cores=2, chains = 2)
@@ -262,6 +263,7 @@ pp_check (alltogether_brms, "bars", nreps=30)
 
 
 #WAIC very low, loo better
+#Model check
 loo(alltogether)
 WAIC(alltogether)
 
