@@ -90,7 +90,7 @@ meta_ur <- bf(AVG_Total_MC ~ UR, family="poisson")
 fixef(meta_ur)
 
 #Poisson
-ACT_ur <- bf(ACT_COMP_GROUP ~ UR, family="poisson")
+ACT_ur <- bf(ACT_COMP_GROUP ~ UR, family="cumulative")
 fixef(ACT_ur)
 
 #The cumulative option for families should give your proportional odds models 
@@ -155,6 +155,7 @@ fixef(ACT_ur)
 
 PC_UR <- bf(PostCount ~ UR + AVG_WC, family ="poisson" )
 
+#"cumulative" for grade and ACT
 grade <- bf(CRS_GRADE_ID ~ AVG_Total_MC + UR + ACT_COMP_GROUP, family="cumulative") 
 fixef(grade)
 WAIC(grade)
