@@ -48,37 +48,25 @@ for(p in pkgs) {
 
 #The data
 setwd("~/Desktop")
-ASTR_EX <- read_excel("Research/ASTR2016_Extended.xlsx")
-#summary(ASTR_EX)
-#attach(ASTR_EX)
-#head(ASTR_EX)
 
-#Density Plots
-#if chains converge nicely then compute w/in and btwn chain variance 
-
-grid.arrange(stan_trace(alltogether$fit, ncol=1),
-             stan_dens(alltogether$fit, separate_chains=TRUE,ncol=1),
-             ncol=2)
-
+ASTR_EX<-read.csv("Research/ASTR_Bay.csv")
+names(ASTR_EX)[23]<-"AVG_Word_Count"
 
 variable.names(ASTR_EX)
-hist(AVG_WC)
+hist(AVG_Word_Count)
 hist(PostCount)
 
 #Next create your sub-models
 
-#this doesnt run 
-
-
 #Poisson
-ACT_ur <- bf(ACT_COMP_GROUP ~ UR, family="poisson")
+ACT_ur <- bf(ACT_COMP_GROUP ~ UR, family="cumulative")
 fixef(ACT_ur)
 
 #The cumulative option for families should give your proportional odds models 
-grade <- bf(CRS_GRADE_ID ~ AVG_Total_MC + UR + ACT_COMP_GROUP, family="cumulative") 
+grade <- bf(CRS_GRADE_ID ~ Total_MC + UR + ACT_COMP_GROUP, family="cumulative") 
 fixef(grade)
 WAIC(grade)
-
+typeof(ASTR_EX$PostCount)
 
 #The smaller the better
 loo(model_simple)
@@ -88,7 +76,7 @@ WAIC(model_simple)
 #Put it all together
 
 #Making variables integers for the model to be able to porcess 
-#ASTR_EX$AVG_Total_MC <- as.integer(ASTR_EX$AVG_Total_MC)
+#ASTR_EX$Total_MC <- as.integer(ASTR_EX$Total_MC)
 #ASTR_EX$UR <- as.integer(ASTR_EX$UR)
 
 
@@ -96,14 +84,21 @@ WAIC(model_simple)
 
 #warmup = first 2000 iteration
 #rhat =  ratios of between and within variance estimates. 
-alltogether <- brm(CRS_GRADE_ID ~ AVG_Total_MC  + UR + AVG_WC + ACT_COMP_GROUP + PostCount, 
+alltogether <- brm(CRS_GRADE_ID ~ Total_MC  + UR + AVG_Word_Count + ACT_COMP_GROUP + PostCount, 
                    data = ASTR_EX, 
-                   warmup = 2000,iter = 5000,
+                   iter = 2000,
                    family = "cumulative",
                    chains= 4,
                    cores= 1)
+names(ASTR_EX)
 summary(alltogether)
 plot(alltogether)
+
+# Density chains
+#if chains converge nicely then compute w/in and btwn chain variance 
+grid.arrange(stan_trace(alltogether$fit, ncol=1),
+             stan_dens(alltogether$fit, separate_chains=TRUE,ncol=1),
+             ncol=2)
 
 ##########################
 #########Mediation########
@@ -112,8 +107,8 @@ plot(alltogether)
 #Step 1
 #What should the order be?
 Med_1 <- "
-  AVG_Total_MC ~ UR + ACT_COMP_GROUP
-  CRS_GRADE_ID ~ AVG_Total_MC + UR + ACT_COMP_GROUP"
+  Total_MC ~ UR + ACT_COMP_GROUP
+  CRS_GRADE_ID ~ Total_MC + UR + ACT_COMP_GROUP"
 
 
 k_fit_lavaan <- sem(Med_1, data = ASTR_EX)
@@ -122,32 +117,28 @@ summary(k_fit_lavaan)
 
 ##NEW
 k_fit_psem<-psem(
-  lm(AVG_Total_MC ~ UR + ACT_COMP_GROUP),
-  lm(CRS_GRADE_ID ~ AVG_Total_MC + UR + ACT_COMP_GROUP),
+  lm(Total_MC ~ UR + ACT_COMP_GROUP),
+  lm(CRS_GRADE_ID ~ Total_MC + UR + ACT_COMP_GROUP),
   data=ASTR_EX
 )
 #Step 2
 #Where does post/word count fit into this?
 
-meta_ur <- bf(AVG_Total_MC ~ UR, family="poisson")
+meta_ur <- bf(Total_MC ~ UR, family="poisson")
 #this doesnt run 
 fixef(meta_ur)
 
-#Poisson
-ACT_ur <- bf(ACT_COMP_GROUP ~ UR, family="cumulative")
-fixef(ACT_ur)
-
 #Post count makes everything take FOREVER
 
-PC_UR <- bf(PostCount ~ UR + AVG_WC, family ="poisson" )
+PC_UR <- bf(PostCount ~ UR + AVG_Word_Count, family ="poisson")
 
-grade <- bf(CRS_GRADE_ID ~ AVG_Total_MC + UR + ACT_COMP_GROUP, family="cumulative") 
+grade <- bf(CRS_GRADE_ID ~ Total_MC + UR + ACT_COMP_GROUP, family="cumulative") 
 fixef(grade)
 WAIC(grade)
 
 alltogether_brms <- brm(meta_ur + ACT_ur + PC_UR + grade, 
                         data = ASTR_EX, 
-                        warmup = 2000,iter = 5000,
+                        iter = 2000,
                         family = "cumulative",
                         chains= 4,
                         cores= 1)
@@ -255,12 +246,11 @@ pp_check(allpost)
 ?ppc_bars
 ?pp_check
 
-pp_check (alltogether_brms, "bars", nreps=30)
+pp_check(alltogether_brms, "bars", nreps=30)
 
 
 #WAIC very low, loo better
 #Model check
 loo(alltogether)
 WAIC(alltogether)
-
 
